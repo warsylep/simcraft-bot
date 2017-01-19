@@ -20,8 +20,8 @@ def check_simc():
     readversion = open(os.path.join(htmldir, 'debug', 'simc.ver'), 'r')
     return readversion.read().splitlines()
 
-async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare):
-    default = 'armory="%s,%s,%s" calculate_scale_factors="%s" scale_only="agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating" html="%ssims/%s/%s" threads="%s" iterations="%s" fight_style="%s"' % (region, realm, char, scale, htmldir, char, htmladdr, threads, iterations, fightstyle)
+async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare, maxtime, varylength):
+    default = 'armory="%s,%s,%s" calculate_scale_factors="%s" scale_only="agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating" html="%ssims/%s/%s" threads="%s" iterations="%s" fight_style="%s" max_time="%s" vary_combat_length="%s"' % (region, realm, char, scale, htmldir, char, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
     if talents > '1' and compare == '0':
         options = '%s talents="%s"' % (default, talents)
     elif talents > '1' and compare > '1':
@@ -51,18 +51,21 @@ async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, f
             if 'html report took' in process_check[-2]:
                 loop = False
                 link = 'Full report: %ssims/%s/%s' % (website, char.replace("'",""), htmladdr)
-                for line in process_check:
-                    if 'DPS:' in line:
-                        line = line
-                        break
-                line = line.strip()
-                line = line.split(" ")
+                line = '0'
+                if compare == '0':
+                    for line in process_check:
+                        if 'DPS:' in line:
+                            line = line
+                            break
+                    line = line.strip()
+                    line = line.split(" ")
                 if len(line) > 1:
                     await bot.edit_message(load,  'Simulation: Complete')
                     msg = '\n%s %s\n%s\n' % (line[0], line[1], link)
                     await bot.send_message(message.channel, msg + '{0.author.mention}'.format(message))
                 else:
-                    await bot.edit_message(load, link + ' {0.author.mention}'.format(message))
+                    await bot.edit_message(load,  'Simulation: Complete')
+                    await bot.send_message(message.channel, link + ' {0.author.mention}'.format(message))
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Simulation: Ready'))
 
             else:
@@ -74,7 +77,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, f
                     load = await bot.edit_message(load, process_check[-1].split()[1] + ' ' + progressbar + ' ' + str(procent) + '%')
 
 # Not the best solution to add queue system, but it works
-async def queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare):
+async def queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare, maxtime, varylength):
     global queuenr
     server = bot.get_server(user_opt['server_opt'][0]['serverid'])
     queueloop = True
@@ -88,7 +91,7 @@ async def queue(realm, char, scale, htmladdr, region, iterations, loop, message,
             msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
             await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Simulation: In Progress'))
             await bot.send_message(message.channel, msg)
-            bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare))
+            bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare, maxtime, varylength))
             return
 
 # Might look ugly but is surprisingly fast for some reason
@@ -106,23 +109,27 @@ def isint(number):
 @bot.event
 async def on_message(message):
     # don't set variables unless the message is for the bot
-    args = message.content.lower()
-    if not args.startswith('!sim'):
+    if not message.content.startswith('!sim'):
         return
+    if message.author == bot.user:
+        return
+    args = message.content.lower()
     server = bot.get_server(user_opt['server_opt'][0]['serverid'])
     channel = bot.get_channel(user_opt['server_opt'][0]['channelid'])
     realm = user_opt['simcraft_opt'][0]['default_realm']
     region = user_opt['simcraft_opt'][0]['region']
-    iterationsset = '0'
+    iterationsset = False
     loop = True
     timestr = time.strftime("%Y%m%d-%H%M%S")
     scale = 0
     scaling = 'No'
     char = ''
-    fightstyle = 'LightMovement'
+    fightstyle = user_opt['simcraft_opt'][0]['fightstyle']
     talents = '0'
     compare = '0'
-    fullscale = '0'
+    fullscale = False
+    varylength = user_opt['simcraft_opt'][0]['varylength']
+    maxtime = user_opt['simcraft_opt'][0]['maxtime']
     global queuenr
 
     if message.server and message.server == bot.get_server('1'):
@@ -132,10 +139,7 @@ async def on_message(message):
 
     if message.server and message.server == bot.get_server('9'):
         fightstyle = 'Patchwerk'
-
-    if message.author == bot.user:
-        return
-    
+ 
     if '/' in args:
         print(args)
         temp = args.split('/')
@@ -153,10 +157,14 @@ async def on_message(message):
         print(args, message.author, message.server, message.channel)
         if args[1].startswith(('hh', 'helphere')):
             msg = open('help.file', 'r', encoding='utf8').read()
+            msg2 = open('help2.file', 'r', encoding='utf8').read()
             await bot.send_message(message.channel, msg)
+            await bot.send_message(message.channel, msg2)
         elif args[1].startswith(('h', 'help')):
             msg = open('help.file', 'r', encoding='utf8').read()
+            msg2 = open('help2.file', 'r', encoding='utf8').read()
             await bot.send_message(message.author, msg)
+            await bot.send_message(message.author, msg2)
         elif args[1].startswith(('gif')):
             await bot.send_message(message.channel, 'https://i.giphy.com/3o7TKMyfMHjPEQLumI.gif')
         elif args[1].startswith(('v', 'version')):
@@ -214,14 +222,14 @@ async def on_message(message):
                             return
                     elif args[i].startswith(('fs ', 'fullscale ')):
                         temp = args[i].split()
-                        fullscale = '1'
+                        fullscale = True
                         iterations = '40000'
                         scaling = 'yes'
                     elif args[i].startswith(('i ', 'iterations ')):
                         if user_opt['simcraft_opt'][0]['allow_iteration_parameter']:
                             temp = args[i].split()
                             if isint(clean(temp[1])):
-                                iterationsset = '1'
+                                iterationsset = True
                                 iterations = int(clean(temp[1]))
                                 if iterations > 200000:
                                     iterations = 1000
@@ -235,13 +243,33 @@ async def on_message(message):
                         else:
                             await bot.send_message(message.channel, 'Custom iterations is disabled')
                             return
-                    elif args[i].startswith(('compare ')):
+                    elif args[i].startswith(('ct ', 'compare ')):
                         temp = args[i].split()
                         if len(clean(temp[1])) == 7 and isint(temp[1]):
                             compare = clean(temp[1])
                         else:
                             await bot.send_message(message.author, 'Invalid data given for option: compare')
                             return
+                    elif args[i].startswith(('vary ')):
+                        temp = args[i].split()
+                        if temp[1] == 'yes':
+                            varylength = '0.20'
+                        elif temp[1] == 'no':
+                            varylength = '0'
+                        else:
+                            await bot.send_message(message.author, 'Invalid data given for option: vary')
+                            return
+                    elif args[i].startswith(('time ')):
+                        temp = args[i].split()
+                        if isint(clean(temp[1])):
+                            maxtime = int(clean(temp[1]))
+                            if maxtime > 600:
+                                maxtime = 600
+                            elif maxtime < 10:
+                                maxtime = 10
+                        else:
+                            await bot.send_message(message.author, 'Invalid data given for option: time')
+                            return 
                     else:
                         await bot.send_message(message.channel, 'Unknown command. Use !sim -h/help for commands')
                         return
@@ -250,14 +278,14 @@ async def on_message(message):
                 return
             if scaling == 'yes' and compare == '0':
                 scale = 1
-                if iterationsset == '0':
+                if not iterationsset:
                     iterations = '20000'
             user = message.author
             os.makedirs(os.path.dirname(os.path.join(htmldir + 'sims', char, 'test.file')), exist_ok=True)
             if message.server:
-                # D
+                # Dr
                 if message.server == bot.get_server('1'):
-                    print('D - override')
+                    print('Dr - override')
                     message.channel = message.author
                 # Ea
                 elif message.server == bot.get_server('9'):
@@ -268,7 +296,7 @@ async def on_message(message):
                     print('Ef - override')
                     message.channel = bot.get_channel('2')
             htmladdr = '%s-%s.html' % (char, timestr)
-            if server.me.status != discord.Status.online or fullscale == '1':
+            if server.me.status != discord.Status.online or fullscale:
                 if queuenr > 5:
                     print('Queue overflow', timestr)
                     await bot.send_message(message.channel, 'Too many requests in queue, please try again later')
@@ -280,11 +308,11 @@ async def on_message(message):
                 print('--------------')
                 queuenr = queuenr + 1
                 await bot.send_message(message.channel, msg)
-                bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare))
-                if fullscale == '1':
+                bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare, maxtime, varylength))
+                if fullscale:
                     fightstyle = 'HeavyMovement'
                     htmladdr = '%s-%s-2.html' % (char, timestr)
-                    bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare))
+                    bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare, maxtime, varylength))
             else:
                 msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
                 await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Simulation: In Progress'))
@@ -293,7 +321,7 @@ async def on_message(message):
                 print(' @', message.server, '#', message.channel)
                 print('--------------')
                 await bot.send_message(message.channel, msg)
-                bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare))
+                bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare, maxtime, varylength))
 
 
 @bot.event
