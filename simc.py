@@ -14,6 +14,7 @@ htmldir = user_opt['simcraft_opt'][0]['htmldir']
 website = user_opt['simcraft_opt'][0]['website']
 os.makedirs(os.path.dirname(os.path.join(htmldir + 'debug', 'test.file')), exist_ok=True)
 queuenr = 0
+busy = False
 
 def check_simc():
     os.system(os.path.join(user_opt['simcraft_opt'][0]['executable'] + ' > ' + htmldir, 'debug', 'simc.ver 2> ' + os.devnull))
@@ -21,15 +22,12 @@ def check_simc():
     return readversion.read().splitlines()
 
 async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, fightstyle, talents, compare, maxtime, varylength):
-    default = 'armory="%s,%s,%s" calculate_scale_factors="%s" scale_only="agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating" html="%ssims/%s/%s" threads="%s" iterations="%s" fight_style="%s" max_time="%s" vary_combat_length="%s"' % (region, realm, char, scale, htmldir, char, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
-    if talents > '1' and compare == '0':
-        options = '%s talents="%s"' % (default, talents)
-    elif talents > '1' and compare > '1':
-        options = '%s talents="%s" copy="%s" talents="%s"' % (default, talents, compare, compare)
-    elif talents == '0' and compare > '1':
-        options = '%s copy="%s" talents="%s"' % (default, compare, compare)
-    else:
-        options = default
+    global busy
+    options = 'armory="%s,%s,%s" calculate_scale_factors="%s" scale_only="agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating" html="%ssims/%s/%s" threads="%s" iterations="%s" fight_style="%s" max_time="%s" vary_combat_length="%s"' % (region, realm, char, scale, htmldir, char, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
+    if talents > '1':
+        options = '%s talents="%s"' % (options, talents)
+    if compare > '1':
+        options = '%s copy="%s" talents="%s"' % (options, compare, compare)
     os.makedirs(os.path.dirname(os.path.join(htmldir + 'sims', char, 'test.file')), exist_ok=True)
     load = await bot.send_message(message.channel, 'Simulation: Starting...')
     os.system(os.path.join(user_opt['simcraft_opt'][0]['executable'] + ' ' + options + ' > ' + htmldir, 'debug', 'simc.stout 2> ' + htmldir, 'debug', 'simc.sterr &'))
@@ -46,6 +44,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, f
             if 'ERROR' in err_check[-1] or 'Segmentation fault' in err_check[-1]:
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Simulation: Ready'))
                 await bot.edit_message(load, 'Error, something went wrong:\n ' + "\n".join(err_check))
+                busy = False
                 return
         if len(process_check) > 1:
             if 'html report took' in process_check[-2]:
@@ -67,6 +66,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, f
                     await bot.edit_message(load,  'Simulation: Complete')
                     await bot.send_message(message.channel, link + ' {0.author.mention}'.format(message))
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Simulation: Ready'))
+                busy = False
 
             else:
                 if 'Generating' in process_check[-1]:
@@ -79,15 +79,16 @@ async def sim(realm, char, scale, htmladdr, region, iterations, loop, message, f
 # Not the best solution to add queue system, but it works
 async def queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare, maxtime, varylength):
     global queuenr
-    server = bot.get_server(user_opt['server_opt'][0]['serverid'])
+    global busy
     queueloop = True
     while queueloop:
-        if server.me.status != discord.Status.online:
+        if busy:
              await asyncio.sleep(10)
         else:
             queueloop = False
             loop = True
             queuenr = queuenr - 1
+            busy = True
             msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
             await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Simulation: In Progress'))
             await bot.send_message(message.channel, msg)
@@ -131,6 +132,7 @@ async def on_message(message):
     varylength = user_opt['simcraft_opt'][0]['varylength']
     maxtime = user_opt['simcraft_opt'][0]['maxtime']
     global queuenr
+    global busy
 
     if message.server and message.server == bot.get_server('1'):
         iterations = user_opt['simcraft_opt'][0]['default_iterations']
@@ -139,7 +141,7 @@ async def on_message(message):
 
     if message.server and message.server == bot.get_server('9'):
         fightstyle = 'Patchwerk'
- 
+    
     if '/' in args:
         print(args)
         temp = args.split('/')
@@ -296,7 +298,7 @@ async def on_message(message):
                     print('Ef - override')
                     message.channel = bot.get_channel('2')
             htmladdr = '%s-%s.html' % (char, timestr)
-            if server.me.status != discord.Status.online or fullscale:
+            if busy or fullscale:
                 if queuenr > 5:
                     print('Queue overflow', timestr)
                     await bot.send_message(message.channel, 'Too many requests in queue, please try again later')
@@ -315,6 +317,7 @@ async def on_message(message):
                     bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, loop, message, scaling, fightstyle, talents, compare, maxtime, varylength))
             else:
                 msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
+                busy = True
                 await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Simulation: In Progress'))
                 print('Simming ' + char + ' @ ' + realm + ' - ', end="")
                 print(user, end="")
