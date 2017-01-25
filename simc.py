@@ -52,7 +52,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
         if len(process_check) > 1:
             if 'html report took' in process_check[-2]:
                 loop = False
-                link = 'Full report: %ssims/%s/%s' % (website, char.replace("'",""), htmladdr)
+                link = 'Full report: %ssims/%s/%s' % (website, char, htmladdr)
                 line = '0'
                 if compare == '0':
                     for line in process_check:
@@ -113,7 +113,7 @@ def isint(number):
 @bot.event
 async def on_message(message):
     # don't set variables unless the message is for the bot
-    if not message.content.startswith('!sim'):
+    if (message.server and not message.content.startswith('!sim ')) or (not message.server and not message.content.startswith('!sim')):
         return
     if message.author == bot.user:
         return
@@ -180,7 +180,7 @@ async def on_message(message):
             await bot.send_message(message.channel, msg)
         else:
             for i in range(len(args)):
-                if args[i] != '!simc ' and args[i] != '!sim ':
+                if args[i] != '!sim ':
                     if args[i].startswith(('r ', 'realm ')):
                         temp = args[i][2:].strip()
                         realm = clean(temp.replace('_', '-').replace(' ', '-'))
