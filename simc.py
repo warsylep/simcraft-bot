@@ -1,4 +1,5 @@
 import os
+import subprocess
 import discord
 import asyncio
 import time
@@ -24,23 +25,26 @@ def check_simc():
 async def sim(realm, char, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies):
     global busy
     loop = True
-    options = 'armory="%s,%s,%s" calculate_scale_factors="%s" scale_only="agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating" html="%ssims/%s/%s" threads="%s" iterations="%s" fight_style="%s" max_time="%s" vary_combat_length="%s"' % (region, realm, char, scale, htmldir, char, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
-    if enemies > '1':
+    options = 'armory=%s,%s,%s calculate_scale_factors=%s scale_only=agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating html=%s%s/%s/%s threads=%s iterations=%s fight_style=%s max_time=%s vary_combat_length=%s' % (region, realm, char, scale, htmldir, region, realm, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
+    if enemies:
         options = '%s %s' % (options, enemies)
-    if talents > '1':
-        options = '%s talents="%s"' % (options, talents)
-    if compare > '1':
-        options = '%s copy="%s" talents="%s"' % (options, compare, compare)
-    os.makedirs(os.path.dirname(os.path.join(htmldir + 'sims', char, 'test.file')), exist_ok=True)
+    if talents:
+        options = '%s talents=%s' % (options, talents)
+    if compare:
+        options = '%s copy=%s talents=%s' % (options, compare, compare)
+    os.makedirs(os.path.dirname(os.path.join(htmldir, region, realm, 'test.file')), exist_ok=True)
     load = await bot.send_message(message.channel, 'Simulation: Starting...')
-    os.system(os.path.join(user_opt['simcraft_opt'][0]['executable'] + ' ' + options + ' > ' + htmldir, 'debug', 'simc.stout 2> ' + htmldir, 'debug', 'simc.sterr &'))
+    command = "%s %s" % (user_opt['simcraft_opt'][0]['executable'], options)
+    stdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "w")
+    stderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "w")
+    subprocess.Popen(command.split(" "), universal_newlines=True, stdout=stdout, stderr=stderr)
 
     await asyncio.sleep(1)
     while loop:
-        readstout = open(os.path.join(htmldir, 'debug', 'simc.stout'), "r")
-        readsterr = open(os.path.join(htmldir, 'debug', 'simc.sterr'), "r")
-        process_check = readstout.readlines()
-        err_check = readsterr.readlines()
+        readstdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "r")
+        readstderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "r")
+        process_check = readstdout.readlines()
+        err_check = readstderr.readlines()
         await asyncio.sleep(1)
         if len(err_check) > 0:
             print(err_check[-1])
@@ -52,9 +56,9 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
         if len(process_check) > 1:
             if 'html report took' in process_check[-2]:
                 loop = False
-                link = 'Full report: %ssims/%s/%s' % (website, char, htmladdr)
+                link = 'Full report: %s%s/%s/%s' % (website, region, realm, htmladdr)
                 line = '0'
-                if compare == '0':
+                if not compare:
                     for line in process_check:
                         if 'DPS:' in line:
                             line = line
@@ -110,7 +114,7 @@ def isint(number):
     except ValueError:
         return False
 
-@bot.event
+@bot.async_event
 async def on_message(message):
     # don't set variables unless the message is for the bot
     if (message.server and not message.content.startswith('!sim ')) or (not message.server and not message.content.startswith('!sim')):
@@ -127,8 +131,8 @@ async def on_message(message):
     scaling = 'No'
     char = ''
     fightstyle = user_opt['simcraft_opt'][0]['fightstyle']
-    talents = '0'
-    compare = '0'
+    talents = 0
+    compare = 0
     enemies = ''
     fullscale = False
     varylength = user_opt['simcraft_opt'][0]['varylength']
@@ -142,12 +146,9 @@ async def on_message(message):
     else:
         realm = ''
         iterations = '10000'
-
-    if message.server and message.server == bot.get_server('9'):
-        fightstyle = 'Patchwerk'
     
     if '/' in args:
-        print(args)
+        print(args, message.author, message.server, message.channel)
         temp = args.split('/')
         temp2 = temp[0].split(' ',1)
         if args.count('/') == 1:
@@ -359,7 +360,7 @@ async def on_message(message):
                 bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies))
 
 
-@bot.event
+@bot.async_event
 async def on_ready():
     print('Logged in as')
     print(bot.user.name)
