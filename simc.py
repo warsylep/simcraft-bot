@@ -37,12 +37,12 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
     command = "%s %s" % (user_opt['simcraft_opt'][0]['executable'], options)
     stdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "w")
     stderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "w")
-    subprocess.Popen(command.split(" "), universal_newlines=True, stdout=stdout, stderr=stderr)
+    process = subprocess.Popen(command.split(" "), universal_newlines=True, stdout=stdout, stderr=stderr)
 
     await asyncio.sleep(1)
+    readstdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "r")
+    readstderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "r")
     while loop:
-        readstdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "r")
-        readstderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "r")
         process_check = readstdout.readlines()
         err_check = readstderr.readlines()
         await asyncio.sleep(1)
@@ -52,6 +52,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Simulation: Ready'))
                 await bot.edit_message(load, 'Error, something went wrong:\n ' + "\n".join(err_check))
                 busy = False
+                process.terminate()
                 return
         if len(process_check) > 1:
             if 'html report took' in process_check[-2]:
@@ -74,6 +75,7 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
                     await bot.send_message(message.channel, link + ' {0.author.mention}'.format(message))
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Simulation: Ready'))
                 busy = False
+                process.terminate()
 
             else:
                 if 'Generating' in process_check[-1]:
@@ -146,7 +148,7 @@ async def on_message(message):
     else:
         realm = ''
         iterations = '10000'
-    
+
     if '/' in args:
         print(args, message.author, message.server, message.channel)
         temp = args.split('/')
@@ -303,7 +305,7 @@ async def on_message(message):
             if realm == '':
                 await bot.send_message(message.channel, 'Realm name is needed')
                 return
-            if scaling == 'yes' and compare == '0':
+            if scaling == 'yes' and not compare:
                 scale = 1
                 if not iterationsset:
                     iterations = '20000'
