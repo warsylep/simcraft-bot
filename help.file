@@ -1,45 +1,31 @@
 ***Help for simulation through Discord:***
 ***Options:***
--c      -character         **in-game name**
--r      -realm                 **realm name** *(Default is Magtheridon)*
--s      -scale                  **yes/no** *(Default is no)*
--d      -data                   **armory/addon** *(Default is armory)*
--v      -version              **gives the version of simulationcraft being used**
+-c       -character                    **in-game name**
+-r        -realm                          **realm name**
+-z       -region                          **wow region us/eu/tw/kr/zh** *(Default is EU)*
+-s       -scale                            **stat scaling yes/no** *(Default is no)*
+-i        -iterations                    **number of iterations** *(Default is 10000)*
+-f        -fightstyle                    **light/heavy/patchwerk/beast/cleave** *(Default is light)*
+-t        -talents                        **talents in style of 1 to 3 (7 numbers)** *(Default is using talents from armory)*
+-ct      -compare                    **compare talents to armory or -t, in the style of 1 to 3 (7 numbers)**
+-ci      -compareitem             **compare item to armory, you must provide a valid simulationcraft item string**
+-ri      -replaceitem                **replace item in your gear, you must provide a valid simulationcraft item string**
+-e       -enemies                     **number of enemies, 2-5** *(Default is 1)*
+           -vary                            **vary combat length yes/no** *(Default is yes)*
+           -time                            **fight length, number between 10 and 600** *(Default is 300)*
 
-● Simulate using armory with stat scaling:
-`!simc -character NAME -scale yes`
+-v       -version                       **gives the version of simulationcraft being used**
+           -gif                                **the gif**
 
-● Simulate using addon without stat scaling:
-`!simc -character NAME -d addon`
+***Please read:***
+Make sure you take a note of what the default settings are, if you are in the EU for example you don't need to use -z
+But if you are playing in the US region you will have to use -z
 
-The bot will whisper asking for a paste of data string from the addon ingame. The last line should contain** DONE**.
-Addon can be found here: <https://mods.curse.com/addons/wow/simulationcraft>
+Stat scaling takes a lot longer than just a normal sim, only use this option when you need it, do not use it for testing 
 
-__example__:
-```warlock="Stokbaek"
-level=110
-race=goblin
-region=eu
-server=magtheridon
-role=attack
-professions=alchemy=784/herbalism=800
-talents=1131323
-spec=destruction
-artifact=38:0:0:0:0:803:1:807:3:808:2:809:3:810:3:811:3
-:812:3:814:1:815:1:817:1:818:1:1355:1
-head=,id=139909,bonus_id=665
-neck=,id=139332,enchant_id=5439,bonus_id=1807/1808/1472
-shoulder=,id=134221,bonus_id=3416/1532/3336
-back=,id=139248,bonus_id=1805/1808/1492/3336
-chest=,id=142410,bonus_id=3468/1808/1492
-wrist=,id=142415,bonus_id=3467/1497/3337
-hands=,id=140993,bonus_id=1805/1487
-waist=,id=142153,bonus_id=3452/1487/3337
-legs=,id=139190,bonus_id=1805/1487
-feet=,id=134308,bonus_id=3415/1522/3336
-finger1=,id=132452,enchant_id=5428,bonus_id=3459/3458
-finger2=,id=142520,enchant_id=5428,bonus_id=3467/1492/3337
-trinket1=,id=137301,bonus_id=3509/1532/3336
-trinket2=,id=142157,bonus_id=41/3453/1472
-main_hand=,id=128941,bonus_id=749,relic_id=3506:1482/3467:1477/3453:1472,gem_id=0/0/0/0
-DONE```
+**Fightstyle translation:**
+light = LightMovement
+heavy = HeavyMovement
+cleave = HecticAddCleave
+beast = Beastlord
+See https://github.com/simulationcraft/simc/wiki/RaidEvents for more information

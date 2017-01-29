@@ -14,7 +14,10 @@
       "executable": "/usr/local/sbin/simc-715",
       "region": "eu",
       "allow_iteration_parameter": false,
-      "default_iterations": "25000"
+      "default_iterations": "25000",
+      "fightstyle": "LightMovement",
+      "varylength": "0.20",
+      "maxtime": 300
     }
   ]
 }

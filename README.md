@@ -4,6 +4,7 @@ SimulationCraft Bot for discord.
 This is a fork of https://github.com/stokbaek/simc-discord that is ment to be used across multiple discord "servers" instead of only one.
 It adds support for queuing requests, more simulationcraft options like comparing talents, maxtime and more.
 Do note that this code should not be considered production ready and may contain bugs and security issues.
+If you are looking at running your own bot you should use main repo, its better suited for normal usage and is tested on multiple systems.
 
 The following things are needed to run the bot:
 * Python 3.5+

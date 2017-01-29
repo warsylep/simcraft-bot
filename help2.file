@@ -1,0 +1,37 @@
+__examples__:
+
+● Simulate a character on non-default region:
+`!sim -c NAME -r REALM -z REGION`
+
+● A alternative way of writing region, realm and name, can also be combined with normal options (options must come after name):
+`!sim REGION/REALM/NAME`
+`!sim REGION/REALM/NAME -f cleave`
+Do NOT use -c with this alternative way
+
+● If you are in the EU you can omit region like this:
+`!sim REALM/NAME`
+`!sim -c NAME -r REALM`
+
+● Simulate a character with talent comparison to armory:
+`!sim -c NAME -compare 1231231`
+
+● Simulate a character with talent comparison and talent override:
+`!sim -c NAME -t 1231231 -compare 3213211`
+
+● Realm names that include spaces can be written with spaces, underscore or wrapped in quotation marks:
+`!sim -c NAME -r LONG REALM NAME`
+`!sim -c NAME -r LONG_REALM_NAME`
+`!sim -c NAME -r "LONG REALM NAME"`
+
+● Simulate with stat scaling:
+`!sim -c NAME -s yes`
+
+● Simulate a character with scaling, iterations, fightstyle and talents:
+`!sim -c NAME -s yes -i 25000 -f heavy -t 1122331`
+
+● Simulate with -compareitem / -replaceitem:
+`!sim -c NAME -ri trinket2=oakhearts_gnarled_root,id=137306,bonus_id=3509/1532/3336`
+A valid item string can be found on wowhead under "Links", look for the "Simulationcraft" field
+
+***Healing and tank***
+Currently simulationcraft is broken for healing and tanking, it might not work at all or give wrong results, please take this into consideration
