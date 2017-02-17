@@ -1,11 +1,20 @@
 import os
 import subprocess
 import discord
+import logging
+import aiofiles
 import aiohttp
 import asyncio
 import time
 import json
 from urllib.parse import quote
+
+logger = logging.getLogger('discord')
+# Don't set this to DEBUG if you are connected to large servers
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler(filename='simc.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 with open('user_data.json') as data_file:
@@ -18,12 +27,14 @@ website = user_opt['simcraft_opt'][0]['website']
 os.makedirs(os.path.dirname(os.path.join(htmldir + 'debug', 'test.file')), exist_ok=True)
 queuenum = 0
 busy = False
+busytime = 0
+serveroverride = []
 
-def check_simc():
-    # remove comment below if you are using this. (I write to this file during compile, thus have no need to read build version on each run)
-    #os.system(os.path.join(user_opt['simcraft_opt'][0]['executable'] + ' > ' + htmldir, 'debug', 'simc.ver 2> ' + os.devnull))
-    readversion = open(os.path.join(htmldir, 'debug', 'simc.ver'), 'r')
-    return readversion.read().splitlines()
+async def check_simc():
+    # this file is written to during simc compile
+    async with aiofiles.open(os.path.join(htmldir, 'debug', 'simc.ver'), mode='r') as file:
+        readversion = await file.read()
+        return readversion
 
 async def check_api(region, realm, char, apikey):
     url = "https://%s.api.battle.net/wow/character/%s/%s?fields=talents&locale=en_GB&apikey=%s" % (region, realm, quote(char), apikey)
@@ -32,7 +43,7 @@ async def check_api(region, realm, char, apikey):
             data = await response.json()
             if 'reason' in data:
                 return data['reason']
-            else:
+            elif 'talents' in data:
                 spec = 0
                 for i in range(len(data['talents'])):
                     for line in data['talents']:
@@ -41,41 +52,48 @@ async def check_api(region, realm, char, apikey):
                             return role
                         else:
                             spec += +1
-        
-async def sim(realm, char, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem):
+            else:
+                if 'type' in data:
+                    msg = 'Armory API down: %s (%s)' % (data['type'], data['detail'])
+                    return msg
+                else:
+                    return 'Unknown armory API error'
+
+async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem):
     global busy
     loop = True
-    options = 'armory=%s,%s,%s calculate_scale_factors=%s scale_only=agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating html=%s%s/%s/%s threads=%s iterations=%s fight_style=%s max_time=%s vary_combat_length=%s' % (region, realm, char, scale, htmldir, region, realm, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
+    options = 'armory=%s,%s,%s ptr=%s calculate_scale_factors=%s scale_only=agility,strength,intellect,crit_rating,haste_rating,mastery_rating,versatility_rating html=%s%s/%s/%s threads=%s iterations=%s fight_style=%s max_time=%s vary_combat_length=%s' % (region, realm, char, ptr, scale, htmldir, region, realm, htmladdr, threads, iterations, fightstyle, maxtime, varylength)
     if enemies:
-        options = '%s %s' % (options, enemies)
+        options += ' %s' % (enemies)
     if replaceitem:
-        options = '%s %s' % (options, replaceitem)
+        options += ' %s' % (replaceitem)
     if talents:
-        options = '%s talents=%s' % (options, talents)
+        options += ' talents=%s' % (talents)
     if compare and not compareitem:
-        options = '%s copy=%s talents=%s' % (options, compare, compare)
+        options += ' copy=%s talents=%s' % (compare, compare)
     if compareitem and not compare:
-        options = '%s copy=%s_2 %s' % (options, char, compareitem)
+        options += ' copy=%s_2 %s' % (char, compareitem)
     os.makedirs(os.path.dirname(os.path.join(htmldir, region, realm, 'test.file')), exist_ok=True)
     load = await bot.send_message(message.channel, 'Simulation: Starting...')
     command = "%s %s" % (user_opt['simcraft_opt'][0]['executable'], options)
-    stdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "w")
-    stderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "w")
+    stdout = await aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stdout'), "w")
+    stderr = await aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stderr'), "w")
     process = subprocess.Popen(command.split(" "), universal_newlines=True, stdout=stdout, stderr=stderr)
 
     await asyncio.sleep(1)
     while loop:
-        readstdout = open(os.path.join(htmldir, 'debug', 'simc.stdout'), "r")
-        readstderr = open(os.path.join(htmldir, 'debug', 'simc.stderr'), "r")
-        process_check = readstdout.readlines()
-        err_check = readstderr.readlines()
-        await asyncio.sleep(1)
+        async with aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stdout'), "r") as readstdout:
+            process_check = await readstdout.readlines()
+        async with aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stderr'), "r") as readstderr:
+            err_check = await readstderr.readlines()
+        await asyncio.sleep(1.5)
         if len(err_check) > 0:
             if 'ERROR' in err_check[-1] or 'Segmentation fault' in err_check[-1]:
+                logger.warning('%s-11 - Simc ERROR: %s', message.id, err_check[-1])
+                process.terminate()
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
                 await bot.edit_message(load, 'Error, something went wrong:\n ' + "\n".join(err_check))
                 busy = False
-                process.terminate()
                 return
         if len(process_check) > 1:
             if 'html report took' in process_check[-2]:
@@ -96,9 +114,10 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
                 else:
                     await bot.edit_message(load,  'Simulation: Complete')
                     await bot.send_message(message.channel, link + ' {0.author.mention}'.format(message))
+                logger.info('%s-12 - Sim complete: %s', message.id, link)
+                process.terminate()
                 await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
                 busy = False
-                process.terminate()
 
             else:
                 if 'Generating' in process_check[-1]:
@@ -107,24 +126,6 @@ async def sim(realm, char, scale, htmladdr, region, iterations, message, fightst
                     progressbar = done + missing
                     procent = 100 - process_check[-1].count('.') * 5
                     load = await bot.edit_message(load, process_check[-1].split()[1] + ' ' + progressbar + ' ' + str(procent) + '%')
-
-# Not the best solution to add queue system, but it works
-async def queue(realm, char, scale, htmladdr, region, iterations, message, scaling, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem):
-    global queuenum
-    global busy
-    queueloop = True
-    while queueloop:
-        if busy:
-             await asyncio.sleep(10)
-        else:
-            queueloop = False
-            queuenum = queuenum - 1
-            busy = True
-            msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
-            await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
-            await bot.send_message(message.channel, msg)
-            bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
-            return
 
 # Might look ugly but is surprisingly fast for some reason
 def clean(text):
@@ -152,11 +153,12 @@ async def on_message(message):
     server = bot.get_server(user_opt['server_opt'][0]['serverid'])
     channel = bot.get_channel(user_opt['server_opt'][0]['channelid'])
     region = user_opt['simcraft_opt'][0]['region']
-    regions = ['us', 'eu', 'tw', 'kr', 'zh']
+    regions = ['us', 'eu', 'tw', 'kr']
     apikey = user_opt['simcraft_opt'][0]['apikey']
     apicheck = user_opt['simcraft_opt'][0]['apicheck']
     iterationsset = False
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    ptr = 0
     scale = 0
     scaling = 'No'
     char = ''
@@ -166,11 +168,12 @@ async def on_message(message):
     enemies = ''
     compareitem = ''
     replaceitem = ''
-    fullscale = False
     varylength = user_opt['simcraft_opt'][0]['varylength']
     maxtime = user_opt['simcraft_opt'][0]['maxtime']
     global queuenum
     global busy
+    global busytime
+    global serveroverride
 
     if message.server and message.server == bot.get_server('1'):
         realm = user_opt['simcraft_opt'][0]['default_realm']
@@ -180,6 +183,7 @@ async def on_message(message):
         iterations = '10000'
 
     if '/' in args[:40]:
+        logger.info('%s-1 - %s %s %s %s', message.id, args, message.author, message.server, message.channel)
         temp2 = ''
         extra = ''
         temp = args.split(' ', 1)
@@ -200,23 +204,29 @@ async def on_message(message):
     if '-' in args:
         args = args.split('-')
     else:
+        logger.info('%s-2 - %s %s %s %s', message.id, args, message.author, message.server, message.channel)
         await bot.send_message(message.author, 'Unknown command. Use !sim -h for commands')
         return
     if args:
+        logger.info('%s-3 - %s %s %s %s', message.id, args, message.author, message.server, message.channel)
         if args[1].startswith(('hh', 'helphere')):
-            msg = open('help.file', 'r', encoding='utf8').read()
-            msg2 = open('help2.file', 'r', encoding='utf8').read()
+            async with aiofiles.open('help.file', 'r', encoding='utf8') as help:
+                msg = await help.read()
+            async with aiofiles.open('help2.file', 'r', encoding='utf8') as help2:
+                msg2 = await help2.read()
             await bot.send_message(message.channel, msg)
             await bot.send_message(message.channel, msg2)
         elif args[1].startswith(('h', 'help')):
-            msg = open('help.file', 'r', encoding='utf8').read()
-            msg2 = open('help2.file', 'r', encoding='utf8').read()
+            async with aiofiles.open('help.file', 'r', encoding='utf8') as help:
+                msg = await help.read()
+            async with aiofiles.open('help2.file', 'r', encoding='utf8') as help2:
+                msg2 = await help2.read()
             await bot.send_message(message.author, msg)
             await bot.send_message(message.author, msg2)
         elif args[1].startswith(('gif')):
             await bot.send_message(message.channel, 'https://i.giphy.com/3o7TKMyfMHjPEQLumI.gif')
         elif args[1].startswith(('v', 'version')):
-            await bot.send_message(message.channel, *check_simc())
+            await bot.send_message(message.channel, await check_simc())
         elif args[1].startswith(('queue')):
             msg = 'Request queue: %s' % (queuenum)
             await bot.send_message(message.channel, msg)
@@ -233,6 +243,10 @@ async def on_message(message):
                             return
                         else:
                             char = clean(temp[1])
+                    elif args[i].startswith(('ptr ')):
+                        temp = args[i].split()
+                        if temp[1] == 'yes':
+                            ptr = 1
                     elif args[i].startswith(('s ', 'scaling ')):
                         temp = args[i].split()
                         if temp[1] == 'yes':
@@ -271,11 +285,6 @@ async def on_message(message):
                         else:
                             await bot.send_message(message.author, 'Invalid data given for option: talents')
                             return
-                    elif args[i].startswith(('fs ', 'fullscale ')):
-                        temp = args[i].split()
-                        fullscale = True
-                        iterations = '40000'
-                        scaling = 'yes'
                     elif args[i].startswith(('i ', 'iterations ')):
                         if user_opt['simcraft_opt'][0]['allow_iteration_parameter']:
                             temp = args[i].split()
@@ -353,17 +362,26 @@ async def on_message(message):
                         await bot.send_message(message.author, 'Unknown command. Use !sim -h for commands')
                         return
             if message.server:
+                if message.server.name in serveroverride:
+                    logger.info('%s-4 - serveroverride - override', message.id)
+                    for channel in message.server.channels:
+                        if channel.name == 'simcraft-bot':
+                            message.channel = channel
                 # Dr
                 if message.server == bot.get_server('1'):
+                    logger.info('%s-4 - Dr - override', message.id)
                     message.channel = message.author
                 # Ea
                 elif message.server == bot.get_server('9'):
+                    logger.info('%s-4 - Ea - override', message.id)
                     message.channel = message.author
                 # Ef
                 elif message.server == bot.get_server('1'):
+                    logger.info('%s-4 - Ef - override', message.id)
                     message.channel = bot.get_channel('2')
                 # Bl
                 elif message.server == bot.get_server('1'):
+                    logger.info('%s-4 - Bl - override', message.id)
                     message.channel = message.author
             if char == '':
                 await bot.send_message(message.channel, 'Character name is needed')
@@ -383,6 +401,7 @@ async def on_message(message):
                 return
             if apicheck:
                 api = await check_api(region, realm, char, apikey)
+                logger.info('%s-5 - API response: %s', message.id, api)
                 if api == 'HEALING':
                     await bot.send_message(message.channel, 'SimulationCraft does not support healing specializations.')
                     return
@@ -394,49 +413,116 @@ async def on_message(message):
                     return
             htmladdr = '%s-%s.html' % (char, timestr)
             os.makedirs(os.path.dirname(os.path.join(htmldir + 'sims', char, 'test.file')), exist_ok=True)
-            if busy or fullscale:
+            if busy:
+                if (time.time() - busytime) > 300:
+                    logger.warning('%s-6 - GOT STUCK, resetting busy variable', message.id)
+                    busy = False
+                    await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
                 if queuenum > 5:
+                    logger.info('%s-7 - Queue overflow', message.id)
                     await bot.send_message(message.channel, 'Too many requests in queue, please try again later')
                     return
-                queuenum = queuenum + 1
+                queuenum += 1
                 if queuenum > 1:
                     s = 's'
                 else:
                     s = ''
                 msg = 'Simulation queued, a URL will be provided once your request have been processed.\nThere are currently %s request%s in queue.' % (queuenum, s)
+                logger.info('%s-8 - Queued %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
                 await bot.send_message(message.channel, msg)
-                bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, message, scaling, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
-                if fullscale:
-                    fightstyle = 'HeavyMovement'
-                    htmladdr = '%s-%s-2.html' % (char, timestr)
-                    bot.loop.create_task(queue(realm, char, scale, htmladdr, region, iterations, message, scaling, fightstyle, talents, compare, maxtime, varylength. enemies, compareitem, replaceitem))
+                queueloop = True
+                while queueloop:
+                    if busy:
+                        await asyncio.sleep(10)
+                    else:
+                        queueloop = False
+                        queuenum = queuenum - 1
+                        logger.info('%s-10 - Processing queued request: %s (%s @ %s) from %s', message.id, queuenum, char, realm, message.author)
+                        busy = True
+                        busytime = time.time()
+                        msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
+                        await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+                        await bot.send_message(message.channel, msg)
+                        bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
             else:
                 msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
                 busy = True
+                busytime = time.time()
                 await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+                logger.info('%s-9 - Simming %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
                 await bot.send_message(message.channel, msg)
-                bot.loop.create_task(sim(realm, char, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
+                bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
 
 
 @bot.async_event
 async def on_server_join(server):
-    print('I JOINED A SERVER')
-    print(server)
+    global serveroverride
+    logger.info('I joined server: %s', server)
+    for channel in server.channels:
+        if channel.name == 'simcraft-bot':
+            logger.info('Channel simcraft-bot was added in %s', server.name)
+            serveroverride.append(server.name)
 
 @bot.async_event
 async def on_server_remove(server):
-    print('I LEFT A SERVER')
-    print(server)
+    global serveroverride
+    logger.info('I left server: %s', server)
+    if server.name in serveroverride:
+        logger.info('Channel simcraft-bot got removed in %s', server.name)
+        serveroverride.remove(server.name)
+
+@bot.async_event
+async def on_channel_create(channel):
+    global serveroverride
+    if not channel.name == 'simcraft-bot':
+        return
+    else:
+        if not channel.server.name in serveroverride:
+            logger.info('Channel simcraft-bot was added in %s', channel.server.name)
+            serveroverride.append(channel.server.name)
+
+@bot.async_event
+async def on_channel_delete(channel):
+    global serveroverride
+    if not channel.name == 'simcraft-bot':
+        return
+    else:
+        if channel.server.name in serveroverride:
+            logger.info('Channel simcraft-bot got removed in %s', channel.server.name)
+            serveroverride.remove(channel.server.name)
+
+@bot.async_event
+async def on_channel_update(oldchannel, newchannel):
+    global serveroverride
+    if oldchannel.name == 'simcraft-bot':
+        if oldchannel.server.name in serveroverride:
+            logger.info('Channel simcraft-bot got removed in %s', oldchannel.server.name)
+            serveroverride.remove(oldchannel.server.name)
+    elif newchannel.name == 'simcraft-bot':
+        if not newchannel.server.name in serveroverride:
+            logger.info('Channel simcraft-bot was added in %s', newchannel.server.name)
+            serveroverride.append(newchannel.server.name)
 
 @bot.async_event
 async def on_ready():
+    global serveroverride
     print('Logged in as')
     print(bot.user.name)
-    print(bot.user.id)
-    print(bot.user)
-    print(*check_simc())
+    print('--------------')
+    members = 0
+    for server in bot.servers:
+        members += server.member_count
+        print(server, server.member_count)
+        for channel in server.channels:
+            if channel.name == 'simcraft-bot':
+                if not server.name in serveroverride:
+                    logger.info('Found channel simcraft-bot in %s', server.name)
+                    serveroverride.append(server.name)
+    print('--------------')
+    print('Total users: ', members)
+    print('--------------')
+    print(await check_simc())
     print('--------------')
     await bot.change_presence(game=discord.Game(name='Sim: Ready (!sim -h for help)'))
-
 
 bot.run(user_opt['server_opt'][0]['token'])
