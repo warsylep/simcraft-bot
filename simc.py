@@ -59,6 +59,21 @@ async def check_api(region, realm, char, apikey):
                 else:
                     return 'Unknown armory API error'
 
+# silent failure, best failure
+async def send_message(message, destination, msg):
+    try:
+        return await bot.send_message(destination, msg)
+    except discord.Forbidden:
+        logger.warning('%s - Failed to send message to: %s, redirecting to %s', message.id, destination, message.author)
+        try:
+            return await bot.send_message(message.author, msg)
+        except:
+            logger.warning('%s - Failed to send message to: %s', message.id, message.author)
+            pass
+    except:
+        logger.warning('%s - Failed to send message to: %s', message.id, destination)
+        pass
+
 async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem):
     global busy
     loop = True
@@ -74,7 +89,7 @@ async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fi
     if compareitem and not compare:
         options += ' copy=%s_2 %s' % (char, compareitem)
     os.makedirs(os.path.dirname(os.path.join(htmldir, region, realm, 'test.file')), exist_ok=True)
-    load = await bot.send_message(message.channel, 'Simulation: Starting...')
+    load = await send_message(message, message.channel, 'Simulation: Starting...')
     command = "%s %s" % (user_opt['simcraft_opt'][0]['executable'], options)
     stdout = await aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stdout'), "w")
     stderr = await aiofiles.open(os.path.join(htmldir, 'debug', 'simc.stderr'), "w")
@@ -91,8 +106,16 @@ async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fi
             if 'ERROR' in err_check[-1] or 'Segmentation fault' in err_check[-1]:
                 logger.warning('%s-11 - Simc ERROR: %s', message.id, err_check[-1])
                 process.terminate()
-                await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
-                await bot.edit_message(load, 'Error, something went wrong:\n ' + "\n".join(err_check))
+                try:
+                    await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
+                except:
+                    logger.warning('%s - Failed to set presence online after SimC ERROR', message.id)
+                    pass
+                try:
+                    await bot.edit_message(load, 'Error, something went wrong:\n ' + "\n".join(err_check))
+                except:
+                    logger.warning('%s - Failed to edit message after SimC ERROR', message.id)
+                    pass
                 busy = False
                 return
         if len(process_check) > 1:
@@ -108,15 +131,27 @@ async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fi
                     line = line.strip()
                     line = line.split(" ")
                 if len(line) > 1:
-                    await bot.edit_message(load,  'Simulation: Complete')
+                    try:
+                        await bot.edit_message(load, 'Simulation: Complete')
+                    except:
+                        logger.warning('%s - Failed to edit progress message', message.id)
+                        pass
                     msg = '\n%s %s\n%s\n' % (line[0], line[1], link)
-                    await bot.send_message(message.channel, msg + '{0.author.mention}'.format(message))
+                    await send_message(message, message.channel, msg + '{0.author.mention}'.format(message))
                 else:
-                    await bot.edit_message(load,  'Simulation: Complete')
-                    await bot.send_message(message.channel, link + ' {0.author.mention}'.format(message))
+                    try:
+                        await bot.edit_message(load,  'Simulation: Complete')
+                    except:
+                        logger.warning('%s - Failed to edit message on complete')
+                        pass
+                    await send_message(message, message.channel, link + ' {0.author.mention}'.format(message))
                 logger.info('%s-12 - Sim complete: %s', message.id, link)
                 process.terminate()
-                await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
+                try:
+                    await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
+                except:
+                    logger.warning('%s - Failed to set presence online after sim completion', message.id)
+                    pass
                 busy = False
 
             else:
@@ -125,7 +160,11 @@ async def sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fi
                     missing = '░' * (process_check[-1].count('.'))
                     progressbar = done + missing
                     procent = 100 - process_check[-1].count('.') * 5
-                    load = await bot.edit_message(load, process_check[-1].split()[1] + ' ' + progressbar + ' ' + str(procent) + '%')
+                    try:
+                        load = await bot.edit_message(load, process_check[-1].split()[1] + ' ' + progressbar + ' ' + str(procent) + '%')
+                    except:
+                        logger.warning('%s - Failed to edit message on progress', message.id)
+                        pass
 
 # Might look ugly but is surprisingly fast for some reason
 def clean(text):
@@ -205,7 +244,7 @@ async def on_message(message):
         args = args.split('-')
     else:
         logger.info('%s-2 - %s %s %s %s', message.id, args, message.author, message.server, message.channel)
-        await bot.send_message(message.author, 'Unknown command. Use !sim -h for commands')
+        await send_message(message, message.author, 'Unknown command. Use !sim -h for commands')
         return
     if args:
         logger.info('%s-3 - %s %s %s %s', message.id, args, message.author, message.server, message.channel)
@@ -214,22 +253,22 @@ async def on_message(message):
                 msg = await help.read()
             async with aiofiles.open('help2.file', 'r', encoding='utf8') as help2:
                 msg2 = await help2.read()
-            await bot.send_message(message.channel, msg)
-            await bot.send_message(message.channel, msg2)
+            await send_message(message, message.channel, msg)
+            await send_message(message, message.channel, msg2)
         elif args[1].startswith(('h', 'help')):
             async with aiofiles.open('help.file', 'r', encoding='utf8') as help:
                 msg = await help.read()
             async with aiofiles.open('help2.file', 'r', encoding='utf8') as help2:
                 msg2 = await help2.read()
-            await bot.send_message(message.author, msg)
-            await bot.send_message(message.author, msg2)
+            await send_message(message, message.author, msg)
+            await send_message(message, message.author, msg2)
         elif args[1].startswith(('gif')):
-            await bot.send_message(message.channel, 'https://i.giphy.com/3o7TKMyfMHjPEQLumI.gif')
+            await send_message(message, message.channel, 'https://i.giphy.com/3o7TKMyfMHjPEQLumI.gif')
         elif args[1].startswith(('v', 'version')):
-            await bot.send_message(message.channel, await check_simc())
+            await send_message(message, message.channel, await check_simc())
         elif args[1].startswith(('queue')):
             msg = 'Request queue: %s' % (queuenum)
-            await bot.send_message(message.channel, msg)
+            await send_message(message, message.channel, msg)
         else:
             for i in range(len(args)):
                 if args[i] != '!sim ':
@@ -239,7 +278,7 @@ async def on_message(message):
                     elif args[i].startswith(('c ', 'char ', 'character ')):
                         temp = args[i].split()
                         if len(temp[1]) > 12:
-                            await bot.send_message(message.author, 'Invalid data given for option: character')
+                            await send_message(message, message.author, 'Invalid data given for option: character')
                             return
                         else:
                             char = clean(temp[1])
@@ -254,12 +293,12 @@ async def on_message(message):
                         elif temp[1] == 'no':
                             scaling = '0'
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: scaling')
+                            await send_message(message, message.author, 'Invalid data given for option: scaling')
                             return
                     elif args[i].startswith(('z ', 'region ')):
                         temp = args[i].split()
                         if len(temp) > 4 or len(temp) <= 1:
-                            await bot.send_message(message.author, 'Invalid data given for option: region')
+                            await send_message(message, message.author, 'Invalid data given for option: region')
                             return
                         else:
                             region = clean(temp[1])
@@ -276,14 +315,14 @@ async def on_message(message):
                         elif temp[1] == 'cleave' or temp[1] == 'hecticaddcleave':
                             fightstyle = 'HecticAddCleave'
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: fightstyle')
+                            await send_message(message, message.author, 'Invalid data given for option: fightstyle')
                             return
                     elif args[i].startswith(('t ', 'talents ')):
                         temp = args[i].split()
                         if len(clean(temp[1])) == 7 and isint(temp[1]):
                             talents = clean(temp[1])
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: talents')
+                            await send_message(message, message.author, 'Invalid data given for option: talents')
                             return
                     elif args[i].startswith(('i ', 'iterations ')):
                         if user_opt['simcraft_opt'][0]['allow_iteration_parameter']:
@@ -298,31 +337,31 @@ async def on_message(message):
                                 elif iterations < 1:
                                     iterations = 1
                             else:
-                                await bot.send_message(message.author, 'Invalid data given for option: iterations')
+                                await send_message(message, message.author, 'Invalid data given for option: iterations')
                                 return
                         else:
-                            await bot.send_message(message.author, 'Custom iterations is disabled')
+                            await send_message(message, message.author, 'Custom iterations is disabled')
                             return
                     elif args[i].startswith(('ct ', 'compare ')):
                         temp = args[i].split()
                         if len(clean(temp[1])) == 7 and isint(temp[1]):
                             compare = clean(temp[1])
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: compare')
+                            await send_message(message, message.author, 'Invalid data given for option: compare')
                             return
                     elif args[i].startswith(('ci ', 'compareitem ')):
                         temp = args[i].split()
                         if checkitem(temp[1]):
                             compareitem = temp[1].replace(' ', '')
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: compareitem')
+                            await send_message(message, message.author, 'Invalid data given for option: compareitem')
                             return
                     elif args[i].startswith(('ri ', 'replaceitem ')):
                         temp = args[i].split()
                         if checkitem(temp[1]):
                             replaceitem = temp[1].replace(' ', '')
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: replaceitem')
+                            await send_message(message, message.author, 'Invalid data given for option: replaceitem')
                             return
                     elif args[i].startswith(('vary ')):
                         temp = args[i].split()
@@ -331,7 +370,7 @@ async def on_message(message):
                         elif temp[1] == 'no':
                             varylength = '0'
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: vary')
+                            await send_message(message, message.author, 'Invalid data given for option: vary')
                             return
                     elif args[i].startswith(('time ')):
                         temp = args[i].split()
@@ -342,7 +381,7 @@ async def on_message(message):
                             elif maxtime < 10:
                                 maxtime = 10
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: time')
+                            await send_message(message, message.author, 'Invalid data given for option: time')
                             return 
                     elif args[i].startswith(('e ', 'enemies ')):
                         temp = args[i].split()
@@ -353,13 +392,13 @@ async def on_message(message):
                                 for i in range(1, temp[1]+1):
                                     enemies += 'enemy=Fluffy_Pillow%s ' % i
                             else:
-                                await bot.send_message(message.author, 'Invalid data given for option: enemies')
+                                await send_message(message, message.author, 'Invalid data given for option: enemies')
                                 return
                         else:
-                            await bot.send_message(message.author, 'Invalid data given for option: enemies')
+                            await send_message(message, message.author, 'Invalid data given for option: enemies')
                             return
                     else:
-                        await bot.send_message(message.author, 'Unknown command. Use !sim -h for commands')
+                        await send_message(message, message.author, 'Unknown command. Use !sim -h for commands')
                         return
             if message.server:
                 if message.server.name in serveroverride:
@@ -384,43 +423,43 @@ async def on_message(message):
                     logger.info('%s-4 - Bl - override', message.id)
                     message.channel = message.author
             if char == '':
-                await bot.send_message(message.channel, 'Character name is needed')
+                await send_message(message, message.channel, 'Character name is needed')
                 return
             if realm == '':
-                await bot.send_message(message.channel, 'Realm name is needed')
+                await send_message(message, message.channel, 'Realm name is needed')
                 return
             if not region in regions:
-                await bot.send_message(message.channel, 'Region is not valid or is unsupported, see help for valid regions')
+                await send_message(message, message.channel, 'Region is not valid or is unsupported, see help for valid regions')
                 return
             if scaling == 'yes' and not compare:
                 scale = 1
                 if not iterationsset:
                     iterations = '20000'
             if compare and compareitem:
-                await bot.send_message(message.channel, "You can't compare items and talents at the same time")
+                await send_message(message, message.channel, "You can't compare items and talents at the same time")
                 return
             if apicheck:
                 api = await check_api(region, realm, char, apikey)
                 logger.info('%s-5 - API response: %s', message.id, api)
                 if api == 'HEALING':
-                    await bot.send_message(message.channel, 'SimulationCraft does not support healing specializations.')
+                    await send_message(message, message.channel, 'SimulationCraft does not support healing specializations.')
                     return
                 elif api == 'TANK':
-                    await bot.send_message(message.channel, 'Warning: Tank specializations is poorly supported in SimulationCraft and will probably provide inaccurate results.')
+                    await send_message(message, message.channel, 'Warning: Tank specializations is poorly supported in SimulationCraft and will probably provide inaccurate results.')
                 elif not api == 'DPS':
                     msg = 'Something went wrong when trying to fetch character data: %s' % (api)
-                    await bot.send_message(message.channel, msg)
+                    await send_message(message, message.channel, msg)
                     return
             htmladdr = '%s-%s.html' % (char, timestr)
             os.makedirs(os.path.dirname(os.path.join(htmldir + 'sims', char, 'test.file')), exist_ok=True)
             if busy:
-                if (time.time() - busytime) > 300:
+                if (time.time() - busytime) > 600:
                     logger.warning('%s-6 - GOT STUCK, resetting busy variable', message.id)
                     busy = False
                     await bot.change_presence(status=discord.Status.online, game=discord.Game(name='Sim: Ready (!sim -h for help)'))
                 if queuenum > 5:
                     logger.info('%s-7 - Queue overflow', message.id)
-                    await bot.send_message(message.channel, 'Too many requests in queue, please try again later')
+                    await send_message(message, message.channel, 'Too many requests in queue, please try again later')
                     return
                 queuenum += 1
                 if queuenum > 1:
@@ -429,7 +468,7 @@ async def on_message(message):
                     s = ''
                 msg = 'Simulation queued, a URL will be provided once your request have been processed.\nThere are currently %s request%s in queue.' % (queuenum, s)
                 logger.info('%s-8 - Queued %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
-                await bot.send_message(message.channel, msg)
+                await send_message(message, message.channel, msg)
                 queueloop = True
                 while queueloop:
                     if busy:
@@ -441,16 +480,24 @@ async def on_message(message):
                         busy = True
                         busytime = time.time()
                         msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
-                        await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
-                        await bot.send_message(message.channel, msg)
+                        try:
+                            await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+                        except:
+                            logger.warning('%s - Failed to change presence dnd', message.id)
+                            pass
+                        await send_message(message, message.channel, msg)
                         bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
             else:
                 msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
                 busy = True
                 busytime = time.time()
-                await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+                try:
+                    await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+                except:
+                    logger.warning('%s - Failed to change presence dnd', message.id)
+                    pass
                 logger.info('%s-9 - Simming %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
-                await bot.send_message(message.channel, msg)
+                await send_message(message, message.channel, msg)
                 bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
 
 
@@ -494,7 +541,7 @@ async def on_channel_delete(channel):
 @bot.async_event
 async def on_channel_update(oldchannel, newchannel):
     global serveroverride
-    if oldchannel.name == 'simcraft-bot':
+    if oldchannel.name == 'simcraft-bot' and not newchannel.name == 'simcraft-bot':
         if oldchannel.server.name in serveroverride:
             logger.info('Channel simcraft-bot got removed in %s', oldchannel.server.name)
             serveroverride.remove(oldchannel.server.name)
