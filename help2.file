@@ -33,5 +33,5 @@ Do NOT use -c with this alternative way
 `!sim -c NAME -ri trinket2=oakhearts_gnarled_root,id=137306,bonus_id=3509/1532/3336`
 A valid item string can be found on wowhead under "Links", look for the "Simulationcraft" field
 
-***Healing and tank***
-Currently simulationcraft is broken for healing and tanking, it might not work at all or give wrong results, please take this into consideration
+***Do you want to redirect output from the bot to avoid spam in main chat channels?***
+Create a channel called `simcraft-bot` in your server and the bot will automatically redirect all output to this channel

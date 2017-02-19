@@ -1,21 +1,22 @@
 ***Help for simulation through Discord:***
 ***Options:***
--c       -character                    **in-game name**
--r        -realm                          **realm name**
--z       -region                          **wow region us/eu/tw/kr/zh** *(Default is EU)*
--s       -scale                            **stat scaling yes/no** *(Default is no)*
--i        -iterations                    **number of iterations** *(Default is 10000)*
--f        -fightstyle                    **light/heavy/patchwerk/beast/cleave** *(Default is light)*
--t        -talents                        **talents in style of 1 to 3 (7 numbers)** *(Default is using talents from armory)*
--ct      -compare                    **compare talents to armory or -t, in the style of 1 to 3 (7 numbers)**
--ci      -compareitem             **compare item to armory, you must provide a valid simulationcraft item string**
--ri      -replaceitem                **replace item in your gear, you must provide a valid simulationcraft item string**
--e       -enemies                     **number of enemies, 2-5** *(Default is 1)*
-           -vary                            **vary combat length yes/no** *(Default is yes)*
-           -time                            **fight length, number between 10 and 600** *(Default is 300)*
+-c       -character          **in-game name**
+-r        -realm                 **realm name**
+-z       -region                **wow region us/eu/tw/kr** *(Default is EU)*
+-s       -scale                  **stat scaling yes/no** *(Default is no)*
+-i        -iterations          **number of iterations** *(Default is 10000)*
+-f        -fightstyle          **light/heavy/patchwerk/beast/cleave** *(Default is light)*
+-t        -talents              **talents in style of 1 to 3 (7 numbers)** *(Default is using talents from armory)*
+-ct      -compare           **compare talents to armory or -t, in the style of 1 to 3 (7 numbers)**
+-ci      -compareitem   **compare item to armory, you must provide a valid simulationcraft item string**
+-ri      -replaceitem       **replace item in your gear, you must provide a valid simulationcraft item string**
+-e       -enemies            **number of enemies, 2-5** *(Default is 1)*
+           -vary                   **vary combat length yes/no** *(Default is yes)*
+           -time                  **fight length, number between 10 and 600** *(Default is 300)*
+           -ptr                     **enable PTR data yes/no** *(Default is no)*
 
--v       -version                       **gives the version of simulationcraft being used**
-           -gif                                **the gif**
+-v       -version            **shows simulationcraft version**
+           -gif                     **the gif**
 
 ***Please read:***
 Make sure you take a note of what the default settings are, if you are in the EU for example you don't need to use -z

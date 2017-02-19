@@ -13,6 +13,8 @@
       "default_realm": "magtheridon",
       "executable": "/usr/local/sbin/simc-715",
       "region": "eu",
+      "apikey": "BLIZZARD APIKEY",
+      "apicheck": true,
       "allow_iteration_parameter": false,
       "default_iterations": "25000",
       "fightstyle": "LightMovement",
