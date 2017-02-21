@@ -28,7 +28,7 @@ os.makedirs(os.path.dirname(os.path.join(htmldir + 'debug', 'test.file')), exist
 queuenum = 0
 busy = False
 busytime = 0
-serveroverride = []
+serveroverride = {}
 
 async def check_simc():
     # this file is written to during simc compile
@@ -402,10 +402,9 @@ async def on_message(message):
                         return
             if message.server:
                 if message.server.name in serveroverride:
-                    logger.info('%s-4 - serveroverride - override', message.id)
-                    for channel in message.server.channels:
-                        if channel.name == 'simcraft-bot':
-                            message.channel = channel
+                    if not message.channel == serveroverride[message.server.name]:
+                        logger.info('%s-4 - serveroverride - override from: %s to: %s', message.id, message.channel, serveroverride[message.server.name])
+                        message.channel = serveroverride[message.server.name]
                 # Dr
                 if message.server == bot.get_server('1'):
                     logger.info('%s-4 - Dr - override', message.id)
@@ -508,7 +507,7 @@ async def on_server_join(server):
     for channel in server.channels:
         if channel.name == 'simcraft-bot':
             logger.info('Channel simcraft-bot was added in %s', server.name)
-            serveroverride.append(server.name)
+            serveroverride[server.name] = channel
 
 @bot.async_event
 async def on_server_remove(server):
@@ -516,7 +515,7 @@ async def on_server_remove(server):
     logger.info('I left server: %s', server)
     if server.name in serveroverride:
         logger.info('Channel simcraft-bot got removed in %s', server.name)
-        serveroverride.remove(server.name)
+        del serveroverride[server.name]
 
 @bot.async_event
 async def on_channel_create(channel):
@@ -526,7 +525,7 @@ async def on_channel_create(channel):
     else:
         if not channel.server.name in serveroverride:
             logger.info('Channel simcraft-bot was added in %s', channel.server.name)
-            serveroverride.append(channel.server.name)
+            serveroverride[channel.server.name] = channel
 
 @bot.async_event
 async def on_channel_delete(channel):
@@ -536,7 +535,7 @@ async def on_channel_delete(channel):
     else:
         if channel.server.name in serveroverride:
             logger.info('Channel simcraft-bot got removed in %s', channel.server.name)
-            serveroverride.remove(channel.server.name)
+            del serveroverride[channel.server.name]
 
 @bot.async_event
 async def on_channel_update(oldchannel, newchannel):
@@ -544,11 +543,11 @@ async def on_channel_update(oldchannel, newchannel):
     if oldchannel.name == 'simcraft-bot' and not newchannel.name == 'simcraft-bot':
         if oldchannel.server.name in serveroverride:
             logger.info('Channel simcraft-bot got removed in %s', oldchannel.server.name)
-            serveroverride.remove(oldchannel.server.name)
+            del serveroverride[oldchannel.server.name]
     elif newchannel.name == 'simcraft-bot':
         if not newchannel.server.name in serveroverride:
             logger.info('Channel simcraft-bot was added in %s', newchannel.server.name)
-            serveroverride.append(newchannel.server.name)
+            serveroverride[newchannel.server.name] = newchannel
 
 @bot.async_event
 async def on_ready():
@@ -564,7 +563,7 @@ async def on_ready():
             if channel.name == 'simcraft-bot':
                 if not server.name in serveroverride:
                     logger.info('Found channel simcraft-bot in %s', server.name)
-                    serveroverride.append(server.name)
+                    serveroverride[server.name] = channel
     print('--------------')
     print('Total users: ', members)
     print('--------------')
