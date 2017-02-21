@@ -29,6 +29,7 @@ queuenum = 0
 busy = False
 busytime = 0
 serveroverride = {}
+largeserver = []
 
 async def check_simc():
     # this file is written to during simc compile
@@ -212,7 +213,6 @@ async def on_message(message):
     global queuenum
     global busy
     global busytime
-    global serveroverride
 
     if message.server and message.server == bot.get_server('1'):
         realm = user_opt['simcraft_opt'][0]['default_realm']
@@ -405,21 +405,9 @@ async def on_message(message):
                     if not message.channel == serveroverride[message.server.name]:
                         logger.info('%s-4 - serveroverride - override from: %s to: %s', message.id, message.channel, serveroverride[message.server.name])
                         message.channel = serveroverride[message.server.name]
-                # Dr
-                if message.server == bot.get_server('1'):
-                    logger.info('%s-4 - Dr - override', message.id)
-                    message.channel = message.author
-                # Ea
-                elif message.server == bot.get_server('9'):
-                    logger.info('%s-4 - Ea - override', message.id)
-                    message.channel = message.author
-                # Ef
-                elif message.server == bot.get_server('1'):
-                    logger.info('%s-4 - Ef - override', message.id)
-                    message.channel = bot.get_channel('2')
-                # Bl
-                elif message.server == bot.get_server('1'):
-                    logger.info('%s-4 - Bl - override', message.id)
+                # We must redirect commands to DM on large servers to avoid spam
+                if message.server.name in largeserver:
+                    logger.info('%s-4 - largeserver - override from: %s to: %s', message.id, message.channel, message.author)
                     message.channel = message.author
             if char == '':
                 await send_message(message, message.channel, 'Character name is needed')
@@ -503,7 +491,11 @@ async def on_message(message):
 @bot.async_event
 async def on_server_join(server):
     global serveroverride
+    global largeserver
     logger.info('I joined server: %s', server)
+    if server.member_count > 1000:
+        logger.info('Large server found: %s', server.name)
+        largeserver.append(server.name)
     for channel in server.channels:
         if channel.name == 'simcraft-bot':
             logger.info('Channel simcraft-bot was added in %s', server.name)
@@ -552,12 +544,16 @@ async def on_channel_update(oldchannel, newchannel):
 @bot.async_event
 async def on_ready():
     global serveroverride
+    global largeserver
     print('Logged in as')
     print(bot.user.name)
     print('--------------')
     members = 0
     for server in bot.servers:
         members += server.member_count
+        if server.member_count > 1000:
+            logger.info('Large server found: %s', server.name)
+            largeserver.append(server.name)
         print(server, server.member_count)
         for channel in server.channels:
             if channel.name == 'simcraft-bot':
