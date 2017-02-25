@@ -40,25 +40,32 @@ async def check_simc():
 async def check_api(region, realm, char, apikey):
     url = "https://%s.api.battle.net/wow/character/%s/%s?fields=talents&locale=en_GB&apikey=%s" % (region, realm, quote(char), apikey)
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            data = await response.json()
-            if 'reason' in data:
-                return data['reason']
-            elif 'talents' in data:
-                spec = 0
-                for i in range(len(data['talents'])):
-                    for line in data['talents']:
-                        if 'selected' in line:
-                            role = data['talents'][spec]['spec']['role']
-                            return role
-                        else:
-                            spec += +1
-            else:
-                if 'type' in data:
-                    msg = 'Armory API down: %s (%s)' % (data['type'], data['detail'])
-                    return msg
+        try:
+            async with session.get(url) as response:
+                data = await response.json()
+                if 'reason' in data:
+                    return data['reason']
+                elif 'talents' in data:
+                   spec = 0
+                   for i in range(len(data['talents'])):
+                        for line in data['talents']:
+                            if 'selected' in line:
+                                role = data['talents'][spec]['spec']['role']
+                                return role
+                            else:
+                                spec += +1
                 else:
-                    return 'Unknown armory API error'
+                    if 'type' in data:
+                        if 'detail' in data:
+                            msg = 'Armory API seems to be down: %s (%s)' % (data['type'], data['detail'])
+                        else:
+                            msg = 'Armory API seems to be down: %s' % (data['type'])
+                        return msg
+                    else:
+                        return 'Unknown armory API error'
+        except:
+            logger.warning('Unknown error in aiohttp request: %s', url)
+            return 'Unknown armory API error' 
 
 # silent failure, best failure
 async def send_message(message, destination, msg):
@@ -185,13 +192,11 @@ def checkitem(item):
 @bot.async_event
 async def on_message(message):
     # don't set variables unless the message is for the bot
-    if (message.server and not message.content.startswith('!sim ')) or (not message.server and not message.content.startswith('!sim')):
+    if (message.server and not message.content.startswith('!sim ')):
         return
     if message.author == bot.user:
         return
     args = message.content.lower()
-    server = bot.get_server(user_opt['server_opt'][0]['serverid'])
-    channel = bot.get_channel(user_opt['server_opt'][0]['channelid'])
     region = user_opt['simcraft_opt'][0]['region']
     regions = ['us', 'eu', 'tw', 'kr']
     apikey = user_opt['simcraft_opt'][0]['apikey']
@@ -214,7 +219,7 @@ async def on_message(message):
     global busy
     global busytime
 
-    if message.server and message.server == bot.get_server('1'):
+    if message.server and message.server == bot.get_server(user_opt['server_opt'][0]['serverid']):
         realm = user_opt['simcraft_opt'][0]['default_realm']
         iterations = user_opt['simcraft_opt'][0]['default_iterations']
     else:
@@ -405,14 +410,26 @@ async def on_message(message):
                     if not message.channel == serveroverride[message.server.name]:
                         logger.info('%s-4 - serveroverride - override from: %s to: %s', message.id, message.channel, serveroverride[message.server.name])
                         message.channel = serveroverride[message.server.name]
+                    if serveroverride[message.server.name].topic and not realm:
+                        try:
+                            logger.info('%s-4.1 - found topic: %s', message.id, serveroverride[message.server.name].topic)
+                            topic = serveroverride[message.server.name].topic.lower().split(',')
+                            topic[0] = clean(topic[0].strip())
+                            topic[1] = clean(topic[1].strip().replace('_', '-').replace(' ', '-'))
+                            if topic[0] in regions:
+                                region = topic[0]
+                            if len(topic[1]) > 1:
+                                realm = topic[1]
+                        except:
+                            pass
                 # We must redirect commands to DM on large servers to avoid spam
                 if message.server.name in largeserver:
                     logger.info('%s-4 - largeserver - override from: %s to: %s', message.id, message.channel, message.author)
                     message.channel = message.author
-            if char == '':
+            if not char:
                 await send_message(message, message.channel, 'Character name is needed')
                 return
-            if realm == '':
+            if not realm:
                 await send_message(message, message.channel, 'Realm name is needed')
                 return
             if not region in regions:
@@ -463,30 +480,19 @@ async def on_message(message):
                     else:
                         queueloop = False
                         queuenum = queuenum - 1
-                        logger.info('%s-10 - Processing queued request: %s (%s @ %s) from %s', message.id, queuenum, char, realm, message.author)
-                        busy = True
-                        busytime = time.time()
-                        msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
-                        try:
-                            await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
-                        except:
-                            logger.warning('%s - Failed to change presence dnd', message.id)
-                            pass
-                        await send_message(message, message.channel, msg)
-                        bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
-            else:
-                msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
-                busy = True
-                busytime = time.time()
-                try:
-                    await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
-                except:
-                    logger.warning('%s - Failed to change presence dnd', message.id)
-                    pass
-                logger.info('%s-9 - Simming %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
-                await send_message(message, message.channel, msg)
-                bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
-
+                        logger.info('%s-9 - Processing queued request: %s (%s @ %s) from %s', message.id, queuenum, char, realm, message.author)
+            
+            busy = True
+            busytime = time.time()
+            msg = '\nSimulationCraft:\nCharacter: %s @ %s\nScaling: %s\nFight style: %s' % (char.capitalize(), realm.capitalize(), scaling.capitalize(), fightstyle)
+            try:
+                await bot.change_presence(status=discord.Status.dnd, game=discord.Game(name='Sim: In Progress (!sim -h for help)'))
+            except:
+                logger.warning('%s - Failed to change presence dnd', message.id)
+                pass
+            logger.info('%s-10 - Simming %s @ %s - %s @ %s #%s', message.id, char, realm, message.author, message.server, message.channel)
+            await send_message(message, message.channel, msg)
+            bot.loop.create_task(sim(realm, char, ptr, scale, htmladdr, region, iterations, message, fightstyle, talents, compare, maxtime, varylength, enemies, compareitem, replaceitem))
 
 @bot.async_event
 async def on_server_join(server):
@@ -537,8 +543,8 @@ async def on_channel_update(oldchannel, newchannel):
             logger.info('Channel simcraft-bot got removed in %s', oldchannel.server.name)
             del serveroverride[oldchannel.server.name]
     elif newchannel.name == 'simcraft-bot':
-        if not newchannel.server.name in serveroverride:
-            logger.info('Channel simcraft-bot was added in %s', newchannel.server.name)
+        if not newchannel.server.name in serveroverride or not oldchannel.topic == newchannel.topic:
+            logger.info('Channel simcraft-bot was added or updated in %s', newchannel.server.name)
             serveroverride[newchannel.server.name] = newchannel
 
 @bot.async_event
