@@ -21,5 +21,9 @@
       "varylength": "0.20",
       "maxtime": 300
     }
+  ],
+  "blacklist": [
+      "1234",
+      "4321"
   ]
 }
